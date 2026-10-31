@@ -1,4 +1,5 @@
 import * as store from './store.js';
+import { renderTrain } from './train.js';
 
 const view = document.getElementById('view');
 const title = document.getElementById('title');
@@ -9,6 +10,7 @@ const h = (s) => String(s)
 const routes = {
   pao: renderList,
   edit: renderEdit,
+  train: (arg) => renderTrain(view, title, arg),
   data: renderData,
 };
 
@@ -21,7 +23,7 @@ function route() {
     a.classList.toggle('active', a.dataset.tab === (name === 'edit' ? 'pao' : name));
   });
   render(arg);
-  view.focus({ preventScroll: true });
+  if (!view.contains(document.activeElement)) view.focus({ preventScroll: true });
 }
 
 window.addEventListener('hashchange', route);
@@ -140,6 +142,11 @@ function renderData() {
       <label class="btn file">Choose file…<input type="file" id="imp" accept=".json,.csv,.txt,application/json,text/csv"></label>
       <p class="status" id="imp-status" aria-live="polite"></p>
     </section>
+    <section class="card">
+      <h2>Reset training progress</h2>
+      <p>Forget all training history and personal bests, but keep your PAO list.</p>
+      <button class="btn ghost" id="reset-stats">Reset progress</button>
+    </section>
     <section class="card danger">
       <h2>Start over</h2>
       <p>Erase every entry on this device.</p>
@@ -170,15 +177,20 @@ function renderData() {
     ev.target.value = '';
   });
 
-  const reset = view.querySelector('#reset');
-  reset.addEventListener('click', () => {
-    if (reset.dataset.armed) {
-      store.resetAll();
-      reset.textContent = 'Erased';
-      delete reset.dataset.armed;
+  armButton(view.querySelector('#reset-stats'), () => store.resetStats(), 'Progress reset');
+  armButton(view.querySelector('#reset'), () => store.resetAll(), 'Erased');
+}
+
+// Destructive buttons need a second tap to confirm.
+function armButton(btn, action, doneText) {
+  btn.addEventListener('click', () => {
+    if (btn.dataset.armed) {
+      action();
+      btn.textContent = doneText;
+      delete btn.dataset.armed;
     } else {
-      reset.dataset.armed = '1';
-      reset.textContent = 'Tap again to confirm';
+      btn.dataset.armed = '1';
+      btn.textContent = 'Tap again to confirm';
     }
   });
 }

@@ -6,6 +6,7 @@ A small web app for learning and training a 00–99 PAO (Person, Action, Object)
 
 - **PAO list**: all numbers 00–99 with progress, search, and an "incomplete only" filter.
 - **Editor**: edit Person, Action and Object per number. Changes save automatically. Enter jumps to the next field, then to the next number.
+- **Train**: flashcards (number → P/A/O, grade yourself), reverse (P/A/O → type the number), multiple choice, a 60-second speed drill with personal best, or a mix. Ask about Person, Action, Object or all of them. Spaced repetition puts missed numbers in front and spaces out the ones you know. A missed card comes back once later in the same session. The hub shows due/new/mastered counts and the numbers that need work.
 - **Backup**: download your list as a `.json` backup or `.csv` spreadsheet, restore a backup, or import a CSV with columns `number, person, action, object` (comma, semicolon or tab separated).
 
 Your data is stored only in the browser on your device (localStorage). Download a backup now and then.
@@ -14,7 +15,7 @@ Your data is stored only in the browser on your device (localStorage). Download 
 
 1. On GitHub, open the repo's **Settings → Pages**.
 2. Under "Build and deployment", choose **Deploy from a branch**, branch **main**, folder **/ (root)**, and save.
-3. After a minute the app is live at `https://<your-username>.github.io/Memory_App/`.
+3. After a minute the app is live at `https://<your-username>.github.io/M3m0ry_App/`.
 4. Open that link on your phone:
    - **iPhone (Safari)**: Share → *Add to Home Screen*.
    - **Android (Chrome)**: menu ⋮ → *Install app* / *Add to Home screen*.

@@ -8,7 +8,7 @@ export const NUMBERS = Array.from({ length: 100 }, (_, i) => String(i).padStart(
 function emptyData() {
   const pao = {};
   for (const n of NUMBERS) pao[n] = { person: '', action: '', object: '' };
-  return { version: 1, pao, palaces: [] };
+  return { version: 1, pao, stats: {}, records: {}, settings: {}, palaces: [] };
 }
 
 function normalize(raw) {
@@ -23,6 +23,9 @@ function normalize(raw) {
         object: String(e.object ?? ''),
       };
     }
+  }
+  for (const key of ['stats', 'records', 'settings']) {
+    if (raw[key] && typeof raw[key] === 'object') data[key] = raw[key];
   }
   if (Array.isArray(raw.palaces)) data.palaces = raw.palaces;
   return data;
@@ -125,6 +128,56 @@ function parseCSV(text) {
   }
   if (field || row.length) { row.push(field); rows.push(row); }
   return rows;
+}
+
+// ---------- Training stats (spaced repetition) ----------
+
+// Minutes until a number is due again, by box. A miss sends it back to box 0.
+const INTERVALS = [0, 10, 60, 24 * 60, 3 * 24 * 60, 7 * 24 * 60, 21 * 24 * 60];
+export const MASTERED_BOX = 4;
+
+export function getStats(n) {
+  return data.stats[n] ?? { box: 0, due: 0, seen: 0, correct: 0, wrong: 0 };
+}
+
+export function recordAnswer(n, correct, ms) {
+  const s = { ...getStats(n) };
+  s.seen++;
+  if (correct) {
+    s.correct++;
+    s.box = Math.min(s.box + 1, INTERVALS.length - 1);
+  } else {
+    s.wrong++;
+    s.box = 0;
+  }
+  s.due = Date.now() + INTERVALS[s.box] * 60_000;
+  if (ms != null) s.avgMs = s.avgMs ? Math.round(s.avgMs * 0.7 + ms * 0.3) : ms;
+  data.stats[n] = s;
+  save();
+}
+
+export function getRecord(key) {
+  return data.records[key];
+}
+
+export function setRecord(key, value) {
+  data.records[key] = value;
+  save();
+}
+
+export function getSetting(key, fallback) {
+  return data.settings[key] ?? fallback;
+}
+
+export function setSetting(key, value) {
+  data.settings[key] = value;
+  save();
+}
+
+export function resetStats() {
+  data.stats = {};
+  data.records = {};
+  save();
 }
 
 export function resetAll() {

@@ -1,6 +1,6 @@
 // Offline support: serve the app shell from cache, refresh it in the background.
 // Bump CACHE when shipping changes so phones pick up the new version.
-const CACHE = 'pao-memory-v3';
+const CACHE = 'pao-memory-v4';
 const SHELL = [
   './',
   'index.html',
@@ -9,6 +9,7 @@ const SHELL = [
   'js/store.js',
   'js/train.js',
   'js/recall.js',
+  'js/streak.js',
   'manifest.webmanifest',
   'icons/icon.svg',
   'icons/icon-192.png',

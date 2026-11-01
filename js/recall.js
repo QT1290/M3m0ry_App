@@ -1,4 +1,5 @@
 import * as store from './store.js';
+import { streakCard, celebrate } from './streak.js';
 
 const LENGTHS = [12, 24, 36, 48, 60, 80, 100];
 const TIMES = [0, 60, 120, 300]; // seconds to memorize, 0 = untimed
@@ -60,6 +61,7 @@ function renderSetup(view, title) {
   const custom = !LENGTHS.includes(cfg.length);
 
   view.innerHTML = `
+    ${streakCard()}
     <section class="stats-row three">
       <div><b>${bestPerfect ?? '–'}</b><span>longest perfect</span></div>
       <div><b>${bestRun ?? '–'}</b><span>best run</span></div>
@@ -286,6 +288,7 @@ class Test {
       hints: this.cfg.hints,
     };
     store.addRecallResult(result);
+    const streakLine = celebrate(store.logActivity());
 
     this.title.textContent = 'Result';
     this.view.innerHTML = `
@@ -293,6 +296,7 @@ class Test {
         <div class="bignum">${correct}<small>/${n}</small></div>
         <p>${firstError === n ? '<b class="record">Perfect!</b>' : `First <b>${firstError}</b> digits in a row correct`}</p>
         <p>Memorized in <b>${fmtTime(result.memMs)}</b> · recalled in <b>${fmtTime(result.recallMs)}</b></p>
+        ${streakLine}
       </section>
       <section class="card">
         <h2>Your answer</h2>

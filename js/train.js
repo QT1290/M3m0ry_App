@@ -1,4 +1,5 @@
 import * as store from './store.js';
+import { streakCard, celebrate } from './streak.js';
 
 const FIELDS = ['person', 'action', 'object'];
 const LABEL = { person: 'Person', action: 'Action', object: 'Object' };
@@ -67,6 +68,7 @@ export function renderTrain(view, title, arg) {
   }
 
   view.innerHTML = `
+    ${streakCard()}
     <section class="stats-row">
       <div><b>${due}</b><span>due</span></div>
       <div><b>${fresh}</b><span>new</span></div>
@@ -395,10 +397,12 @@ class Session {
         recordLine = `<p class="hint">Personal best: ${best}</p>`;
       }
     }
+    const streakLine = total ? celebrate(store.logActivity()) : '';
     this.view.innerHTML = `
       <section class="card results">
         <div class="bignum">${right}<small>/${total}</small></div>
         ${recordLine}
+        ${streakLine}
         <p>Average answer time: <b>${avg}s</b></p>
       </section>
       ${missed.length ? `

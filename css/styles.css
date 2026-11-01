@@ -322,3 +322,31 @@ code { background: var(--accent-soft); padding: 1px 4px; border-radius: 4px; }
 .history small { grid-column: 2; color: var(--muted); }
 .score { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent); grid-row: span 2; min-width: 4.5em; }
 .score.perfect { color: #2f9e44; }
+
+/* Streak */
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.streak-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  font-variant-numeric: tabular-nums;
+}
+.streak-badge[hidden] { display: none; }
+.streak-badge.pending { opacity: 0.55; }
+
+.streak-card { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; align-items: center; }
+.streak-main { display: flex; align-items: center; gap: 8px; }
+.streak-main b { display: block; font-size: 1.3rem; }
+.streak-main small { color: var(--muted); }
+.flame { font-size: 2rem; filter: grayscale(1); opacity: 0.5; }
+.streak-card.done .flame { filter: none; opacity: 1; }
+.streak-card p { grid-column: 1 / -1; margin: 0; font-size: 0.9rem; }
+.week { list-style: none; margin: 0; padding: 0; display: flex; justify-content: flex-end; gap: 6px; }
+.week li { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 0.7rem; color: var(--muted); }
+.week i { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border); }
+.week li.on i { background: #f08c00; border-color: #f08c00; }
+.week li.today span { color: var(--text); font-weight: 700; }
+.streak-up { color: #e8590c; font-weight: 700; font-size: 1.1rem; }

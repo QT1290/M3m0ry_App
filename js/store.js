@@ -8,7 +8,7 @@ export const NUMBERS = Array.from({ length: 100 }, (_, i) => String(i).padStart(
 function emptyData() {
   const pao = {};
   for (const n of NUMBERS) pao[n] = { person: '', action: '', object: '' };
-  return { version: 1, pao, stats: {}, records: {}, settings: {}, recall: [], palaces: [] };
+  return { version: 1, pao, stats: {}, records: {}, settings: {}, recall: [], activity: {}, palaces: [] };
 }
 
 function normalize(raw) {
@@ -24,7 +24,7 @@ function normalize(raw) {
       };
     }
   }
-  for (const key of ['stats', 'records', 'settings']) {
+  for (const key of ['stats', 'records', 'settings', 'activity']) {
     if (raw[key] && typeof raw[key] === 'object') data[key] = raw[key];
   }
   if (Array.isArray(raw.recall)) data.recall = raw.recall;
@@ -187,10 +187,60 @@ export function getRecallHistory() {
   return data.recall;
 }
 
+// ---------- Daily streak ----------
+// activity maps a local date (YYYY-MM-DD) to the number of sessions finished that day.
+
+export function dayKey(date = new Date()) {
+  const d = new Date(date);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function addDays(date, n) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + n);
+  return d;
+}
+
+export function didTrainOn(date) {
+  return (data.activity[dayKey(date)] ?? 0) > 0;
+}
+
+// Logs a finished session. Returns true when it is the first one today.
+export function logActivity() {
+  const key = dayKey();
+  const first = !data.activity[key];
+  data.activity[key] = (data.activity[key] ?? 0) + 1;
+  save();
+  return first;
+}
+
+// The streak stays alive until the end of the day after the last session.
+export function getStreak() {
+  const today = new Date();
+  const trainedToday = didTrainOn(today);
+  let current = 0;
+  let d = trainedToday ? today : addDays(today, -1);
+  while (didTrainOn(d)) {
+    current++;
+    d = addDays(d, -1);
+  }
+  let best = 0;
+  let run = 0;
+  let prev = null;
+  for (const key of Object.keys(data.activity).sort()) {
+    const day = new Date(`${key}T12:00:00`);
+    run = prev && dayKey(addDays(prev, 1)) === key ? run + 1 : 1;
+    best = Math.max(best, run);
+    prev = day;
+  }
+  return { current, best: Math.max(best, current), trainedToday };
+}
+
 export function resetStats() {
   data.stats = {};
   data.records = {};
   data.recall = [];
+  data.activity = {};
   save();
 }
 

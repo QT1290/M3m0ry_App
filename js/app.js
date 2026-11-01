@@ -1,6 +1,7 @@
 import * as store from './store.js';
 import { renderTrain } from './train.js';
 import { renderRecall } from './recall.js';
+import { updateBadge } from './streak.js';
 
 const view = document.getElementById('view');
 const title = document.getElementById('title');
@@ -25,6 +26,7 @@ function route() {
     a.classList.toggle('active', a.dataset.tab === (name === 'edit' ? 'pao' : name));
   });
   render(arg);
+  updateBadge();
   if (!view.contains(document.activeElement)) view.focus({ preventScroll: true });
 }
 

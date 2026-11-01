@@ -8,7 +8,7 @@ export const NUMBERS = Array.from({ length: 100 }, (_, i) => String(i).padStart(
 function emptyData() {
   const pao = {};
   for (const n of NUMBERS) pao[n] = { person: '', action: '', object: '' };
-  return { version: 1, pao, stats: {}, records: {}, settings: {}, palaces: [] };
+  return { version: 1, pao, stats: {}, records: {}, settings: {}, recall: [], palaces: [] };
 }
 
 function normalize(raw) {
@@ -27,6 +27,7 @@ function normalize(raw) {
   for (const key of ['stats', 'records', 'settings']) {
     if (raw[key] && typeof raw[key] === 'object') data[key] = raw[key];
   }
+  if (Array.isArray(raw.recall)) data.recall = raw.recall;
   if (Array.isArray(raw.palaces)) data.palaces = raw.palaces;
   return data;
 }
@@ -174,9 +175,22 @@ export function setSetting(key, value) {
   save();
 }
 
+// ---------- Recall test history ----------
+
+export function addRecallResult(result) {
+  data.recall.push(result);
+  if (data.recall.length > 500) data.recall.shift();
+  save();
+}
+
+export function getRecallHistory() {
+  return data.recall;
+}
+
 export function resetStats() {
   data.stats = {};
   data.records = {};
+  data.recall = [];
   save();
 }
 

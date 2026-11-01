@@ -7,6 +7,7 @@ A small web app for learning and training a 00–99 PAO (Person, Action, Object)
 - **PAO list**: all numbers 00–99 with progress, search, and an "incomplete only" filter.
 - **Editor**: edit Person, Action and Object per number. Changes save automatically. Enter jumps to the next field, then to the next number.
 - **Train**: flashcards (number → P/A/O, grade yourself), reverse (P/A/O → type the number), multiple choice, a 60-second speed drill with personal best, or a mix. Ask about Person, Action, Object or all of them. Spaced repetition puts missed numbers in front and spaces out the ones you know. A missed card comes back once later in the same session. The hub shows due/new/mastered counts and the numbers that need work.
+- **Recall test**: memorize a random string of digits (12 to 100, or any length) with or without a time limit, then type it back. Shows all digits at once or one PAO image (6 digits) at a time, with an optional practice mode that shows the PAO under each group. Results show which digits were wrong and are saved to a history with your longest perfect run.
 - **Backup**: download your list as a `.json` backup or `.csv` spreadsheet, restore a backup, or import a CSV with columns `number, person, action, object` (comma, semicolon or tab separated).
 
 Your data is stored only in the browser on your device (localStorage). Download a backup now and then.

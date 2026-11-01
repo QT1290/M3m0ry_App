@@ -1,5 +1,6 @@
 import * as store from './store.js';
 import { renderTrain } from './train.js';
+import { renderRecall } from './recall.js';
 
 const view = document.getElementById('view');
 const title = document.getElementById('title');
@@ -11,6 +12,7 @@ const routes = {
   pao: renderList,
   edit: renderEdit,
   train: (arg) => renderTrain(view, title, arg),
+  recall: (arg) => renderRecall(view, title, arg),
   data: renderData,
 };
 

@@ -258,24 +258,39 @@ class Session {
     const e = store.getEntry(n);
     const t0 = Date.now();
     this.view.innerHTML = `${this.header()}
-      <div class="card-q">
-        <div class="bignum">${n}</div>
-        <p class="prompt">Recall the person, action and object.</p>
-        <dl class="reveal" hidden>
-          ${FIELDS.map((f) => `<dt>${LABEL[f]}</dt><dd>${h(e[f] || '—')}</dd>`).join('')}
-        </dl>
-      </div>
+      <button class="flip" type="button" aria-label="Flip card">
+        <span class="flip-inner">
+          <span class="face front">
+            <span class="bignum">${n}</span>
+            <span class="prompt">Recall the person, action and object.<br>Tap to flip.</span>
+          </span>
+          <span class="face back" aria-hidden="true">
+            <span class="num">${n}</span>
+            <dl class="reveal">
+              ${FIELDS.map((f) => `<dt>${LABEL[f]}</dt><dd>${h(e[f] || '—')}</dd>`).join('')}
+            </dl>
+          </span>
+        </span>
+      </button>
       <div class="actions">
         <button class="btn big" data-act="show">Show answer</button>
       </div>`;
+    const card = this.view.querySelector('.flip');
     const actions = this.view.querySelector('.actions');
+    const reveal = () => {
+      if (card.classList.contains('flipped')) return;
+      card.classList.add('flipped');
+      card.querySelector('.back').removeAttribute('aria-hidden');
+      card.querySelector('.front').setAttribute('aria-hidden', 'true');
+      actions.innerHTML = `
+        <button class="btn big warn" data-act="miss">Missed</button>
+        <button class="btn big ok" data-act="hit">Got it</button>`;
+    };
+    card.addEventListener('click', reveal);
     actions.addEventListener('click', (ev) => {
       const act = ev.target.closest('button')?.dataset.act;
       if (act === 'show') {
-        this.view.querySelector('.reveal').hidden = false;
-        actions.innerHTML = `
-          <button class="btn big warn" data-act="miss">Missed</button>
-          <button class="btn big ok" data-act="hit">Got it</button>`;
+        reveal();
       } else if (act === 'hit' || act === 'miss') {
         this.answer(n, act === 'hit', t0);
         this.next();

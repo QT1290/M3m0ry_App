@@ -211,7 +211,7 @@ code { background: var(--accent-soft); padding: 1px 4px; border-radius: 4px; }
 .kind { color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.8rem; margin: 0 0 6px; }
 .cue { font-size: 1.8rem; font-weight: 700; margin: 8px 0 20px; overflow-wrap: anywhere; }
 .prompt { color: var(--muted); }
-.reveal { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin: 12px 0 0; }
+.reveal { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; text-align: left; margin: 0; width: 100%; }
 .reveal dt { color: var(--muted); font-size: 0.85rem; padding-top: 2px; }
 .reveal dd { margin: 0; font-weight: 600; font-size: 1.05rem; }
 
@@ -350,3 +350,48 @@ code { background: var(--accent-soft); padding: 1px 4px; border-radius: 4px; }
 .week li.on i { background: #f08c00; border-color: #f08c00; }
 .week li.today span { color: var(--text); font-weight: 700; }
 .streak-up { color: #e8590c; font-weight: 700; font-size: 1.1rem; }
+
+/* Flashcard flip */
+.flip {
+  display: block;
+  width: 100%;
+  height: 260px;
+  margin-bottom: 16px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  perspective: 1000px;
+  cursor: pointer;
+}
+.flip-inner {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.45s ease;
+  transform-style: preserve-3d;
+}
+.flip.flipped .flip-inner { transform: rotateY(180deg); }
+.face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.face.back { transform: rotateY(180deg); }
+.face .bignum { display: block; }
+.face .prompt { color: var(--muted); font-size: 0.9rem; }
+.face .num { align-self: flex-start; }
+@media (prefers-reduced-motion: reduce) { .flip-inner { transition: none; } }

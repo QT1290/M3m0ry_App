@@ -358,3 +358,16 @@ code { background: var(--accent-soft); padding: 1px 4px; border-radius: 4px; }
 .chain-list a { display: flex; gap: 10px; align-items: center; color: inherit; text-decoration: none; }
 .chain-list a span:nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .choice em.best { font-style: normal; font-weight: 600; font-size: 0.75rem; color: var(--accent); background: var(--accent-soft); padding: 1px 6px; border-radius: 999px; margin-left: 4px; }
+
+/* Decode / Encode */
+.triple { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 20px; text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.triple-row { display: grid; grid-template-columns: 5.5em 1fr; align-items: baseline; gap: 8px; }
+.triple-row .kind { margin: 0; }
+.triple-row b { font-size: 1.25rem; overflow-wrap: anywhere; }
+.type-answer input.six { width: 7.5ch; letter-spacing: 0.08em; }
+.six-digits { justify-content: center; font-size: 2.6rem; margin-bottom: 10px; }
+.six-digits .pair { padding: 0 6px; border-radius: 8px; border-bottom: 3px solid transparent; }
+.six-digits .pair.now { border-bottom-color: var(--accent); background: var(--accent-soft); }
+.six-digits .pair.ok { color: #2f9e44; }
+.six-digits .pair.bad { color: var(--warn); }
+.pair-ok { color: #2f9e44; }

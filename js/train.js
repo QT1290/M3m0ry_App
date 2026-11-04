@@ -1,16 +1,21 @@
 import * as store from './store.js';
 import { streakCard, celebrate } from './streak.js';
+import { Chain } from './chain.js';
 
 const FIELDS = ['person', 'action', 'object'];
 const LABEL = { person: 'Person', action: 'Action', object: 'Object' };
 
 const MODES = {
-  mixed: { name: 'Mixed', desc: 'A mix of the exercises below.' },
-  flash: { name: 'Flashcards', desc: 'See a number, recall its P/A/O, then reveal and grade yourself.' },
+  mixed: { name: 'Mixed', desc: 'Reverse and multiple choice mixed together.' },
   reverse: { name: 'Reverse', desc: 'See a person, action or object and type its number.' },
   choice: { name: 'Multiple choice', desc: 'Pick the right answer out of four.' },
   speed: { name: 'Speed drill', desc: '60 seconds of multiple choice. Get as many as you can.' },
+  chain: { name: 'Chain', desc: 'Each line repeats the chain so far plus one new item. Miss an item you had right before and the game ends.' },
 };
+
+// Modes with no fixed number of cards.
+const OPEN_ENDED = ['speed', 'chain'];
+const BEST = { speed: 'speedBest', chain: 'chainBest' };
 
 const SPEED_SECONDS = 60;
 
@@ -46,12 +51,12 @@ export function renderTrain(view, title, arg) {
   activeSession = null;
   title.textContent = 'Train';
   const cfg = store.getSetting('train', { mode: 'mixed', field: 'any', length: 20 });
+  if (!MODES[cfg.mode]) cfg.mode = 'mixed';
   const pool = store.NUMBERS.filter(anyFilled);
   const now = Date.now();
   const due = pool.filter((n) => store.getStats(n).seen && store.getStats(n).due <= now).length;
   const fresh = pool.filter((n) => !store.getStats(n).seen).length;
   const mastered = pool.filter((n) => store.getStats(n).box >= store.MASTERED_BOX).length;
-  const best = store.getRecord('speedBest');
   const weakest = pool
     .filter((n) => store.getStats(n).wrong > 0)
     .sort((a, b) => errorRate(b) - errorRate(a))
@@ -73,7 +78,7 @@ export function renderTrain(view, title, arg) {
       <div><b>${due}</b><span>due</span></div>
       <div><b>${fresh}</b><span>new</span></div>
       <div><b>${mastered}</b><span>mastered</span></div>
-      <div><b>${best ?? '–'}</b><span>speed best</span></div>
+      <div><b>${store.getRecord('chainBest') ?? '–'}</b><span>chain best</span></div>
     </section>
 
     <form class="card train-setup">
@@ -82,7 +87,7 @@ export function renderTrain(view, title, arg) {
         ${Object.entries(MODES).map(([k, m]) => `
           <label class="choice">
             <input type="radio" name="mode" value="${k}" ${cfg.mode === k ? 'checked' : ''}>
-            <span><b>${m.name}</b><small>${m.desc}</small></span>
+            <span><b>${m.name}${BEST[k] && store.getRecord(BEST[k]) != null ? ` <em class="best">Best ${store.getRecord(BEST[k])}</em>` : ''}</b><small>${m.desc}</small></span>
           </label>`).join('')}
       </div>
 
@@ -118,7 +123,7 @@ export function renderTrain(view, title, arg) {
 
   const form = view.querySelector('form');
   const lengthWrap = view.querySelector('#length-wrap');
-  const sync = () => { lengthWrap.hidden = form.elements.mode.value === 'speed'; };
+  const sync = () => { lengthWrap.hidden = OPEN_ENDED.includes(form.elements.mode.value); };
   form.addEventListener('change', sync);
   sync();
   form.addEventListener('submit', (ev) => {
@@ -129,7 +134,7 @@ export function renderTrain(view, title, arg) {
       length: Number(form.elements.count.value),
     };
     store.setSetting('train', next);
-    activeSession = new Session(view, title, next);
+    activeSession = next.mode === 'chain' ? new Chain(view, title, next) : new Session(view, title, next);
     location.hash = '#/train/session';
   });
 }
@@ -220,9 +225,8 @@ class Session {
     }
     const n = this.queue.shift();
     if (n == null) return this.finish();
-    const mode = this.cfg.mode === 'mixed' ? pick(['flash', 'reverse', 'choice']) : this.cfg.mode;
-    if (mode === 'flash') this.askFlash(n);
-    else if (mode === 'reverse') this.askReverse(n);
+    const mode = this.cfg.mode === 'mixed' ? pick(['reverse', 'choice']) : this.cfg.mode;
+    if (mode === 'reverse') this.askReverse(n);
     else this.askChoice(n);
   }
 
@@ -250,52 +254,6 @@ class Session {
       this.queue.splice(Math.min(3, this.queue.length), 0, n);
       this.total++;
     }
-  }
-
-  // Number shown, recall all three, reveal, self-grade.
-  askFlash(n) {
-    this.title.textContent = 'Flashcards';
-    const e = store.getEntry(n);
-    const t0 = Date.now();
-    this.view.innerHTML = `${this.header()}
-      <button class="flip" type="button" aria-label="Flip card">
-        <span class="flip-inner">
-          <span class="face front">
-            <span class="bignum">${n}</span>
-            <span class="prompt">Recall the person, action and object.<br>Tap to flip.</span>
-          </span>
-          <span class="face back" aria-hidden="true">
-            <span class="num">${n}</span>
-            <dl class="reveal">
-              ${FIELDS.map((f) => `<dt>${LABEL[f]}</dt><dd>${h(e[f] || '—')}</dd>`).join('')}
-            </dl>
-          </span>
-        </span>
-      </button>
-      <div class="actions">
-        <button class="btn big" data-act="show">Show answer</button>
-      </div>`;
-    const card = this.view.querySelector('.flip');
-    const actions = this.view.querySelector('.actions');
-    const reveal = () => {
-      if (card.classList.contains('flipped')) return;
-      card.classList.add('flipped');
-      card.querySelector('.back').removeAttribute('aria-hidden');
-      card.querySelector('.front').setAttribute('aria-hidden', 'true');
-      actions.innerHTML = `
-        <button class="btn big warn" data-act="miss">Missed</button>
-        <button class="btn big ok" data-act="hit">Got it</button>`;
-    };
-    card.addEventListener('click', reveal);
-    actions.addEventListener('click', (ev) => {
-      const act = ev.target.closest('button')?.dataset.act;
-      if (act === 'show') {
-        reveal();
-      } else if (act === 'hit' || act === 'miss') {
-        this.answer(n, act === 'hit', t0);
-        this.next();
-      }
-    });
   }
 
   // One field shown, type the number.

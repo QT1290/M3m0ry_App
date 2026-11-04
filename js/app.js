@@ -34,7 +34,31 @@ window.addEventListener('hashchange', route);
 route();
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  // When an updated version takes over, reload once so it is used right away,
+  // but never in the middle of a training session or recall test.
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  const busy = () => /\/(session|go)$/.test(location.hash);
+  let pending = false;
+  const reloadWhenIdle = () => {
+    if (!pending || busy()) return;
+    pending = false;
+    location.reload();
+  };
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) return;
+    pending = true;
+    reloadWhenIdle();
+  });
+  window.addEventListener('hashchange', reloadWhenIdle);
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+    .then((reg) => {
+      reg.update();
+      // Check for updates whenever the app comes back to the foreground.
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') reg.update().catch(() => {});
+      });
+    })
+    .catch(() => {});
 }
 
 // ---------- PAO list ----------

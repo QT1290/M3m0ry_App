@@ -1,16 +1,26 @@
 import * as store from './store.js';
 import { streakCard, celebrate } from './streak.js';
+import { Chain } from './chain.js';
 
 const FIELDS = ['person', 'action', 'object'];
 const LABEL = { person: 'Person', action: 'Action', object: 'Object' };
 
 const MODES = {
-  mixed: { name: 'Mixed', desc: 'A mix of the exercises below.' },
-  flash: { name: 'Flashcards', desc: 'See a number, recall its P/A/O, then reveal and grade yourself.' },
+  mixed: { name: 'Mixed', desc: 'Reverse and multiple choice mixed together.' },
   reverse: { name: 'Reverse', desc: 'See a person, action or object and type its number.' },
   choice: { name: 'Multiple choice', desc: 'Pick the right answer out of four.' },
   speed: { name: 'Speed drill', desc: '60 seconds of multiple choice. Get as many as you can.' },
+  decode: { name: 'Decode', desc: 'See a person, action and object and type the 6 digits they stand for.' },
+  encode: { name: 'Encode', desc: 'See 6 digits and pick the person, action and object as fast as you can.' },
+  slow: { name: 'Slow numbers', desc: 'Drill the numbers you take longest to answer.' },
+  chain: { name: 'Chain', desc: 'Each line repeats the chain so far plus one new item. Miss an item you had right before and the game ends.' },
 };
+
+// Modes with no fixed number of cards.
+const OPEN_ENDED = ['speed', 'chain'];
+// Modes that always use all three of person, action and object.
+const TRIPLE = ['decode', 'encode'];
+const BEST = { speed: 'speedBest', chain: 'chainBest' };
 
 const SPEED_SECONDS = 60;
 
@@ -46,16 +56,17 @@ export function renderTrain(view, title, arg) {
   activeSession = null;
   title.textContent = 'Train';
   const cfg = store.getSetting('train', { mode: 'mixed', field: 'any', length: 20 });
+  if (!MODES[cfg.mode]) cfg.mode = 'mixed';
   const pool = store.NUMBERS.filter(anyFilled);
   const now = Date.now();
   const due = pool.filter((n) => store.getStats(n).seen && store.getStats(n).due <= now).length;
   const fresh = pool.filter((n) => !store.getStats(n).seen).length;
   const mastered = pool.filter((n) => store.getStats(n).box >= store.MASTERED_BOX).length;
-  const best = store.getRecord('speedBest');
   const weakest = pool
     .filter((n) => store.getStats(n).wrong > 0)
     .sort((a, b) => errorRate(b) - errorRate(a))
     .slice(0, 6);
+  const slowest = bySlowness(pool).slice(0, 6);
 
   if (pool.length < 4) {
     view.innerHTML = `
@@ -73,7 +84,7 @@ export function renderTrain(view, title, arg) {
       <div><b>${due}</b><span>due</span></div>
       <div><b>${fresh}</b><span>new</span></div>
       <div><b>${mastered}</b><span>mastered</span></div>
-      <div><b>${best ?? '–'}</b><span>speed best</span></div>
+      <div><b>${store.getRecord('chainBest') ?? '–'}</b><span>chain best</span></div>
     </section>
 
     <form class="card train-setup">
@@ -82,14 +93,16 @@ export function renderTrain(view, title, arg) {
         ${Object.entries(MODES).map(([k, m]) => `
           <label class="choice">
             <input type="radio" name="mode" value="${k}" ${cfg.mode === k ? 'checked' : ''}>
-            <span><b>${m.name}</b><small>${m.desc}</small></span>
+            <span><b>${m.name}${BEST[k] && store.getRecord(BEST[k]) != null ? ` <em class="best">Best ${store.getRecord(BEST[k])}</em>` : ''}</b><small>${m.desc}</small></span>
           </label>`).join('')}
       </div>
 
+      <div id="field-wrap">
       <h2>Ask about</h2>
       <div class="seg">
         ${['any', ...FIELDS].map((f) => `
           <label><input type="radio" name="field" value="${f}" ${cfg.field === f ? 'checked' : ''}><span>${f === 'any' ? 'All' : LABEL[f]}</span></label>`).join('')}
+      </div>
       </div>
 
       <div id="length-wrap">
@@ -103,6 +116,14 @@ export function renderTrain(view, title, arg) {
       <button class="btn start" type="submit">Start</button>
       <p class="hint">Numbers you get wrong come back sooner. Numbers you know well are asked less often.</p>
     </form>
+
+    ${slowest.length ? `
+    <section class="card">
+      <h2>Slowest numbers</h2>
+      <ul class="weak">
+        ${slowest.map((n) => `<li><a href="#/edit/${n}"><span class="num">${n}</span><span>${h(store.getEntry(n).person || '—')}</span><small>${(store.getStats(n).avgMs / 1000).toFixed(1)}s avg</small></a></li>`).join('')}
+      </ul>
+    </section>` : ''}
 
     ${weakest.length ? `
     <section class="card">
@@ -118,7 +139,11 @@ export function renderTrain(view, title, arg) {
 
   const form = view.querySelector('form');
   const lengthWrap = view.querySelector('#length-wrap');
-  const sync = () => { lengthWrap.hidden = form.elements.mode.value === 'speed'; };
+  const fieldWrap = view.querySelector('#field-wrap');
+  const sync = () => {
+    lengthWrap.hidden = OPEN_ENDED.includes(form.elements.mode.value);
+    fieldWrap.hidden = TRIPLE.includes(form.elements.mode.value);
+  };
   form.addEventListener('change', sync);
   sync();
   form.addEventListener('submit', (ev) => {
@@ -129,7 +154,7 @@ export function renderTrain(view, title, arg) {
       length: Number(form.elements.count.value),
     };
     store.setSetting('train', next);
-    activeSession = new Session(view, title, next);
+    activeSession = next.mode === 'chain' ? new Chain(view, title, next) : new Session(view, title, next);
     location.hash = '#/train/session';
   });
 }
@@ -137,6 +162,11 @@ export function renderTrain(view, title, arg) {
 function errorRate(n) {
   const s = store.getStats(n);
   return s.seen ? s.wrong / s.seen + s.wrong * 0.01 : 0;
+}
+
+// Answered numbers, slowest average answer time first.
+function bySlowness(pool) {
+  return pool.filter((n) => store.getStats(n).avgMs).sort((a, b) => store.getStats(b).avgMs - store.getStats(a).avgMs);
 }
 
 // Due numbers first, then new ones, then the ones due soonest.
@@ -165,6 +195,7 @@ class Session {
     this.cfg = cfg;
     this.results = [];
     this.retried = new Set();
+    this.missedPairs = new Set();
   }
 
   fieldFor(n) {
@@ -176,7 +207,30 @@ class Session {
     return store.NUMBERS.filter((n) => (this.cfg.field === 'any' ? anyFilled(n) : filled(n, this.cfg.field)));
   }
 
+  fieldPool(f) {
+    return store.NUMBERS.filter((n) => filled(n, f));
+  }
+
+  // Six-digit cards for Decode/Encode: the person comes from the first pair,
+  // the action from the second and the object from the third.
+  makeTriples(count) {
+    const [ps, as, os] = FIELDS.map((f) => selectNumbers(this.fieldPool(f), count));
+    return Array.from({ length: count }, (_, i) => [ps[i % ps.length], as[i % as.length], os[i % os.length]]);
+  }
+
   start() {
+    if (TRIPLE.includes(this.cfg.mode)) {
+      const short = FIELDS.filter((f) => this.fieldPool(f).length < 4);
+      if (short.length) {
+        this.view.innerHTML = `<section class="card"><h2>Not enough entries</h2>
+          <p>${MODES[this.cfg.mode].name} needs at least 4 numbers with a ${short.map((f) => LABEL[f].toLowerCase()).join(', ')} filled in.</p>
+          <a class="btn" href="#/train">Back</a></section>`;
+        return;
+      }
+      this.queue = this.makeTriples(this.cfg.length);
+      this.total = this.queue.length;
+      return this.next();
+    }
     const pool = this.pool();
     if (pool.length < 4) {
       this.view.innerHTML = `<section class="card"><h2>Not enough entries</h2>
@@ -188,6 +242,12 @@ class Session {
       this.queue = [];
       this.deadline = Date.now() + SPEED_SECONDS * 1000;
       this.timer = setInterval(() => this.tick(), 200);
+    } else if (this.cfg.mode === 'slow') {
+      // Slowest first; top up with unanswered numbers if there aren't enough yet.
+      const slow = bySlowness(pool).slice(0, this.cfg.length);
+      const rest = selectNumbers(pool.filter((n) => !slow.includes(n)), this.cfg.length - slow.length);
+      this.queue = shuffle([...slow, ...rest]);
+      this.total = this.queue.length;
     } else {
       this.queue = selectNumbers(pool, this.cfg.length);
       this.total = this.queue.length;
@@ -220,8 +280,9 @@ class Session {
     }
     const n = this.queue.shift();
     if (n == null) return this.finish();
-    const mode = this.cfg.mode === 'mixed' ? pick(['flash', 'reverse', 'choice']) : this.cfg.mode;
-    if (mode === 'flash') this.askFlash(n);
+    const mode = ['mixed', 'slow'].includes(this.cfg.mode) ? pick(['reverse', 'choice']) : this.cfg.mode;
+    if (mode === 'decode') this.askDecode(n);
+    else if (mode === 'encode') this.askEncode(n);
     else if (mode === 'reverse') this.askReverse(n);
     else this.askChoice(n);
   }
@@ -252,50 +313,131 @@ class Session {
     }
   }
 
-  // Number shown, recall all three, reveal, self-grade.
-  askFlash(n) {
-    this.title.textContent = 'Flashcards';
-    const e = store.getEntry(n);
+  // Records a six-digit card: each pair counts for spaced repetition on its own.
+  answerTriple(triple, rights, startedAt) {
+    const ms = Date.now() - startedAt;
+    triple.forEach((n, i) => {
+      store.recordAnswer(n, rights[i], ms / 3);
+      if (!rights[i]) this.missedPairs.add(n);
+    });
+    this.results.push({ n: triple, correct: rights.every(Boolean), ms });
+  }
+
+  tripleCue(triple) {
+    return FIELDS.map((f, i) => `
+      <div class="triple-row"><span class="kind">${LABEL[f]}</span><b>${h(store.getEntry(triple[i])[f])}</b></div>`).join('');
+  }
+
+  // Person + action + object shown, type the six digits.
+  askDecode(triple) {
+    this.title.textContent = 'Decode';
     const t0 = Date.now();
     this.view.innerHTML = `${this.header()}
-      <button class="flip" type="button" aria-label="Flip card">
-        <span class="flip-inner">
-          <span class="face front">
-            <span class="bignum">${n}</span>
-            <span class="prompt">Recall the person, action and object.<br>Tap to flip.</span>
-          </span>
-          <span class="face back" aria-hidden="true">
-            <span class="num">${n}</span>
-            <dl class="reveal">
-              ${FIELDS.map((f) => `<dt>${LABEL[f]}</dt><dd>${h(e[f] || '—')}</dd>`).join('')}
-            </dl>
-          </span>
-        </span>
-      </button>
-      <div class="actions">
-        <button class="btn big" data-act="show">Show answer</button>
+      <div class="card-q">
+        <div class="triple">${this.tripleCue(triple)}</div>
+        <form class="type-answer" autocomplete="off">
+          <input name="num" class="six" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="000000" aria-label="Six digits">
+          <button class="btn" type="submit">Check</button>
+        </form>
+        <p class="feedback" aria-live="polite"></p>
       </div>`;
-    const card = this.view.querySelector('.flip');
-    const actions = this.view.querySelector('.actions');
-    const reveal = () => {
-      if (card.classList.contains('flipped')) return;
-      card.classList.add('flipped');
-      card.querySelector('.back').removeAttribute('aria-hidden');
-      card.querySelector('.front').setAttribute('aria-hidden', 'true');
-      actions.innerHTML = `
-        <button class="btn big warn" data-act="miss">Missed</button>
-        <button class="btn big ok" data-act="hit">Got it</button>`;
-    };
-    card.addEventListener('click', reveal);
-    actions.addEventListener('click', (ev) => {
-      const act = ev.target.closest('button')?.dataset.act;
-      if (act === 'show') {
-        reveal();
-      } else if (act === 'hit' || act === 'miss') {
-        this.answer(n, act === 'hit', t0);
-        this.next();
+    const form = this.view.querySelector('form');
+    const input = form.elements.num;
+    input.focus();
+    form.addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      if (form.dataset.done === 'wrong') return this.next();
+      if (form.dataset.done) return;
+      const val = input.value.replace(/\D/g, '');
+      if (val.length !== 6) return;
+      const given = [val.slice(0, 2), val.slice(2, 4), val.slice(4, 6)];
+      const rights = triple.map((n, i) => given[i] === n);
+      const correct = rights.every(Boolean);
+      form.dataset.done = correct ? 'right' : 'wrong';
+      input.readOnly = true;
+      this.answerTriple(triple, rights, t0);
+      const fb = this.view.querySelector('.feedback');
+      if (correct) {
+        fb.className = 'feedback ok';
+        fb.textContent = 'Correct!';
+        setTimeout(() => this.next(), 700);
+      } else {
+        fb.className = 'feedback bad';
+        fb.innerHTML = `It's <b>${triple.join(' ')}</b><br>` + triple.map((n, i) => (rights[i]
+          ? `<span class="pair-ok">${n} ✓</span>`
+          : `<span>${given[i]} → <b>${n}</b> ${h(store.getEntry(n)[FIELDS[i]])}</span>`)).join(' · ');
+        form.querySelector('button').textContent = 'Next';
+        form.querySelector('button').focus();
       }
     });
+  }
+
+  // Six digits shown, pick the person, then the action, then the object.
+  askEncode(triple) {
+    this.title.textContent = 'Encode';
+    const t0 = Date.now();
+    const rights = [];
+    this.view.innerHTML = `${this.header()}
+      <div class="card-q">
+        <div class="drow six-digits">${triple.map((n, i) => `<span class="pair" data-i="${i}">${n}</span>`).join('')}</div>
+        <p class="kind" id="step"></p>
+      </div>
+      <div class="options" id="opts"></div>
+      <p class="feedback" aria-live="polite"></p>`;
+    const box = this.view.querySelector('#opts');
+    const stepEl = this.view.querySelector('#step');
+    const fb = this.view.querySelector('.feedback');
+    const pairs = [...this.view.querySelectorAll('.six-digits .pair')];
+
+    const done = () => {
+      this.answerTriple(triple, rights, t0);
+      box.innerHTML = '';
+      pairs.forEach((el) => el.classList.remove('now'));
+      stepEl.textContent = `${((Date.now() - t0) / 1000).toFixed(1)}s`;
+      if (rights.every(Boolean)) {
+        fb.className = 'feedback ok';
+        fb.textContent = 'All three right!';
+        setTimeout(() => this.next(), 700);
+        return;
+      }
+      fb.className = 'feedback bad';
+      fb.innerHTML = triple.map((n, i) => `<b>${n}</b> ${h(store.getEntry(n)[FIELDS[i]])}`).join(' · ');
+      const nextBtn = Object.assign(document.createElement('button'), { className: 'btn', textContent: 'Next' });
+      nextBtn.addEventListener('click', () => this.next());
+      fb.after(nextBtn);
+    };
+
+    const step = (i) => {
+      if (i === 3) return done();
+      const f = FIELDS[i];
+      const n = triple[i];
+      pairs.forEach((el, j) => el.classList.toggle('now', j === i));
+      stepEl.textContent = `${LABEL[f]} for ${n}?`;
+      const seen = new Set([store.getEntry(n)[f].trim().toLowerCase()]);
+      const distractors = [];
+      for (const m of shuffle(this.fieldPool(f))) {
+        const key = store.getEntry(m)[f].trim().toLowerCase();
+        if (m === n || seen.has(key)) continue;
+        seen.add(key);
+        distractors.push(m);
+        if (distractors.length === 3) break;
+      }
+      box.innerHTML = shuffle([n, ...distractors])
+        .map((m) => `<button class="opt" data-n="${m}">${h(store.getEntry(m)[f])}</button>`).join('');
+      let locked = false;
+      box.onclick = (ev) => {
+        const btn = ev.target.closest('.opt');
+        if (!btn || locked) return;
+        locked = true;
+        const ok = btn.dataset.n === n;
+        rights[i] = ok;
+        box.querySelector(`[data-n="${n}"]`).classList.add('right');
+        if (!ok) btn.classList.add('wrong');
+        pairs[i].classList.add(ok ? 'ok' : 'bad');
+        setTimeout(() => step(i + 1), ok ? 250 : 900);
+      };
+    };
+    step(0);
   }
 
   // One field shown, type the number.
@@ -401,7 +543,11 @@ class Session {
     const right = this.results.filter((r) => r.correct).length;
     const total = this.results.length;
     const avg = total ? (this.results.reduce((s, r) => s + r.ms, 0) / total / 1000).toFixed(1) : '–';
-    const missed = [...new Set(this.results.filter((r) => !r.correct).map((r) => r.n))];
+    const per = TRIPLE.includes(this.cfg.mode) ? 'card' : 'answer';
+    const missed = [...new Set([
+      ...this.results.filter((r) => !r.correct && !Array.isArray(r.n)).map((r) => r.n),
+      ...this.missedPairs,
+    ])];
     let recordLine = '';
     if (this.cfg.mode === 'speed') {
       const best = store.getRecord('speedBest') ?? 0;
@@ -418,7 +564,7 @@ class Session {
         <div class="bignum">${right}<small>/${total}</small></div>
         ${recordLine}
         ${streakLine}
-        <p>Average answer time: <b>${avg}s</b></p>
+        <p>Average time per ${per}: <b>${avg}s</b></p>
       </section>
       ${missed.length ? `
       <section class="card">

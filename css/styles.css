@@ -371,3 +371,6 @@ code { background: var(--accent-soft); padding: 1px 4px; border-radius: 4px; }
 .six-digits .pair.ok { color: #2f9e44; }
 .six-digits .pair.bad { color: var(--warn); }
 .pair-ok { color: #2f9e44; }
+
+.retired-count { color: var(--muted); font-weight: 400; }
+.chain-list .retired { color: #2f9e44; font-weight: 700; margin-left: auto; }

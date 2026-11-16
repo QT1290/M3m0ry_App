@@ -1,4 +1,5 @@
 import * as store from './store.js';
+import { renderHome } from './home.js';
 import { renderTrain } from './train.js';
 import { renderRecall } from './recall.js';
 import { updateBadge } from './streak.js';
@@ -10,6 +11,7 @@ const h = (s) => String(s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 const routes = {
+  home: () => renderHome(view, title),
   pao: renderList,
   edit: renderEdit,
   train: (arg) => renderTrain(view, title, arg),
@@ -17,15 +19,26 @@ const routes = {
   data: renderData,
 };
 
+let enterTimer;
 let listFilter = { query: '', onlyMissing: false };
 
 function route() {
-  const [name = 'pao', arg] = location.hash.replace(/^#\/?/, '').split('/');
-  const render = routes[name] ?? renderList;
+  let [name, arg] = location.hash.replace(/^#\/?/, '').split('/');
+  if (!routes[name]) name = 'home';
+  const render = routes[name];
   document.querySelectorAll('.tabbar a').forEach((a) => {
     a.classList.toggle('active', a.dataset.tab === (name === 'edit' ? 'pao' : name));
   });
+  // Screens slide in, except in the middle of a session where every question re-renders.
+  view.classList.remove('enter');
   render(arg);
+  if (!/^(session|go)$/.test(arg ?? '')) {
+    void view.offsetWidth;
+    view.classList.add('enter');
+    clearTimeout(enterTimer);
+    enterTimer = setTimeout(() => view.classList.remove('enter'), 700);
+  }
+  window.scrollTo(0, 0);
   updateBadge();
   if (!view.contains(document.activeElement)) view.focus({ preventScroll: true });
 }
@@ -94,9 +107,9 @@ function renderList() {
       return `<li><a href="#/edit/${n}" class="${store.isComplete(n) ? '' : 'incomplete'}">
         <span class="num">${n}</span>
         <span class="pao">
-          <span><b>P</b>${cell(e.person)}</span>
-          <span><b>A</b>${cell(e.action)}</span>
-          <span><b>O</b>${cell(e.object)}</span>
+          <span><i class="badge person">P</i><span>${cell(e.person)}</span></span>
+          <span><i class="badge action">A</i><span>${cell(e.action)}</span></span>
+          <span><i class="badge object">O</i><span>${cell(e.object)}</span></span>
         </span>
       </a></li>`;
     }).join('') : '<li class="none">No matches.</li>';
@@ -118,9 +131,9 @@ function renderEdit(arg) {
   view.innerHTML = `
     <form class="edit" autocomplete="off">
       <div class="bignum">${n}</div>
-      <label>Person<input name="person" value="${h(e.person)}" enterkeyhint="next"></label>
-      <label>Action<input name="action" value="${h(e.action)}" enterkeyhint="next"></label>
-      <label>Object<input name="object" value="${h(e.object)}" enterkeyhint="done"></label>
+      <label><span class="f-person">Person</span><input name="person" value="${h(e.person)}" enterkeyhint="next"></label>
+      <label><span class="f-action">Action</span><input name="action" value="${h(e.action)}" enterkeyhint="next"></label>
+      <label><span class="f-object">Object</span><input name="object" value="${h(e.object)}" enterkeyhint="done"></label>
       <p class="status" id="status" aria-live="polite">Changes save automatically.</p>
       <div class="pager">
         <a class="btn" href="#/edit/${prev}">‹ ${prev}</a>

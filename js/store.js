@@ -248,3 +248,21 @@ export function resetAll() {
   data = emptyData();
   save();
 }
+
+// ---------- Mastery level ----------
+// 0 empty, 1 not trained yet, 2 learning, 3 familiar, 4 mastered.
+export const LEVEL_NAMES = ['Empty', 'New', 'Learning', 'Familiar', 'Mastered'];
+
+export function level(n) {
+  const e = data.pao[n];
+  if (!e.person.trim() && !e.action.trim() && !e.object.trim()) return 0;
+  const s = getStats(n);
+  if (!s.seen) return 1;
+  if (s.box <= 1) return 2;
+  return s.box < MASTERED_BOX ? 3 : 4;
+}
+
+export function isDue(n) {
+  const s = getStats(n);
+  return s.seen > 0 && s.due <= Date.now();
+}

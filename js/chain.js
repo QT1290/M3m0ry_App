@@ -1,5 +1,6 @@
 import * as store from './store.js';
 import { celebrate } from './streak.js';
+import { confetti, buzz } from './fx.js';
 
 // Chain: each line repeats the whole chain so far plus one new item.
 // Missing the new item shows the answer and the game goes on; missing an
@@ -69,7 +70,7 @@ export class Chain {
         <a href="#/train" class="quit">Quit</a>
       </div>
       <div class="card-q">
-        <p class="kind">${isNew ? '<span class="new-tag">New</span> ' : ''}${LABEL[item.field]}</p>
+        <p class="kind">${isNew ? '<span class="new-tag">New</span> ' : ''}<span class="f-${item.field}">${LABEL[item.field]}</span></p>
         <div class="cue">${h(store.getEntry(item.n)[item.field])}</div>
         <form class="type-answer" autocomplete="off">
           <input name="num" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="00" aria-label="Number">
@@ -96,6 +97,7 @@ export class Chain {
       this.answers++;
       item.thisRight = correct;
       if (correct) item.hits++;
+      else buzz();
       const fb = this.view.querySelector('.feedback');
       if (correct) {
         fb.className = 'feedback ok';
@@ -133,7 +135,10 @@ export class Chain {
     const score = this.lineNo - 1;
     const best = store.getRecord('chainBest') ?? 0;
     const record = score > best;
-    if (record) store.setRecord('chainBest', score);
+    if (record) {
+      store.setRecord('chainBest', score);
+      confetti();
+    }
     const streakLine = this.answers ? celebrate(store.logActivity()) : '';
     this.title.textContent = 'Chain over';
     this.view.innerHTML = `

@@ -1,6 +1,6 @@
 // Offline support: keeps a copy of the app so it works without internet.
 // Bump CACHE when adding or removing files.
-const CACHE = 'pao-memory-v9';
+const CACHE = 'pao-memory-v10';
 const SHELL = [
   './',
   'index.html',
@@ -11,6 +11,10 @@ const SHELL = [
   'js/recall.js',
   'js/streak.js',
   'js/chain.js',
+  'js/home.js',
+  'js/fx.js',
+  'fonts/outfit-latin.woff2',
+  'fonts/outfit-latin-ext.woff2',
   'manifest.webmanifest',
   'icons/icon.svg',
   'icons/icon-192.png',

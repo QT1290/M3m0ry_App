@@ -1,5 +1,6 @@
 import * as store from './store.js';
 import { streakCard, celebrate } from './streak.js';
+import { confetti } from './fx.js';
 
 const LENGTHS = [12, 24, 36, 48, 60, 80, 100];
 const TIMES = [0, 60, 120, 300]; // seconds to memorize, 0 = untimed
@@ -289,6 +290,7 @@ class Test {
     };
     store.addRecallResult(result);
     const streakLine = celebrate(store.logActivity());
+    if (firstError === n) confetti();
 
     this.title.textContent = 'Result';
     this.view.innerHTML = `

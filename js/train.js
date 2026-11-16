@@ -1,25 +1,32 @@
 import * as store from './store.js';
-import { streakCard, celebrate } from './streak.js';
+import { celebrate } from './streak.js';
 import { Chain } from './chain.js';
+import { confetti, buzz } from './fx.js';
 
 const FIELDS = ['person', 'action', 'object'];
 const LABEL = { person: 'Person', action: 'Action', object: 'Object' };
 
 const MODES = {
-  mixed: { name: 'Mixed', desc: 'Reverse and multiple choice mixed together.' },
-  reverse: { name: 'Reverse', desc: 'See a person, action or object and type its number.' },
-  choice: { name: 'Multiple choice', desc: 'Pick the right answer out of four.' },
-  speed: { name: 'Speed drill', desc: '60 seconds of multiple choice. Get as many as you can.' },
-  decode: { name: 'Decode', desc: 'See a person, action and object and type the 6 digits they stand for.' },
-  encode: { name: 'Encode', desc: 'See 6 digits and pick the person, action and object as fast as you can.' },
-  slow: { name: 'Slow numbers', desc: 'Drill the numbers you take longest to answer.' },
-  chain: { name: 'Chain', desc: 'Each line repeats the chain so far plus one new item. Miss an item you had right before and the game ends.' },
+  learn: { icon: '🌱', name: 'Learn new', desc: 'Study 5 numbers you have not trained yet, then get quizzed on them right away.' },
+  mixed: { icon: '🎲', name: 'Mixed', desc: 'Reverse and multiple choice mixed together.' },
+  reverse: { icon: '🔢', name: 'Reverse', desc: 'See a person, action or object and type its number.' },
+  choice: { icon: '🎯', name: 'Choice', desc: 'Pick the right answer out of four.' },
+  speed: { icon: '⚡', name: 'Speed drill', desc: '60 seconds of multiple choice. Get as many as you can.' },
+  decode: { icon: '🔓', name: 'Decode', desc: 'See a person, action and object and type the 6 digits they stand for.' },
+  encode: { icon: '🔐', name: 'Encode', desc: 'See 6 digits and pick the person, action and object as fast as you can.' },
+  slow: { icon: '🐢', name: 'Slow numbers', desc: 'Drill the numbers you take longest to answer.' },
+  chain: { icon: '🔗', name: 'Chain', desc: 'Each line repeats the chain so far plus one new item. Miss an item you had right before and the game ends.' },
 };
+// Started from the Home tab, not listed on the Train tab.
+const DAILY = { name: "Today's workout" };
+const LEARN_COUNT = 5;
 
 // Modes with no fixed number of cards.
-const OPEN_ENDED = ['speed', 'chain'];
+const OPEN_ENDED = ['speed', 'chain', 'learn'];
 // Modes that always use all three of person, action and object.
 const TRIPLE = ['decode', 'encode'];
+// Modes where you can't choose which of the three is asked.
+const ALL_FIELDS = [...TRIPLE, 'learn'];
 const BEST = { speed: 'speedBest', chain: 'chainBest' };
 
 const SPEED_SECONDS = 60;
@@ -43,6 +50,12 @@ const anyFilled = (n) => FIELDS.some((f) => filled(n, f));
 // ---------- Hub ----------
 
 let activeSession = null;
+
+// Starts a session straight away (used by the Home tab).
+export function launch(view, title, cfg) {
+  activeSession = new Session(view, title, cfg);
+  location.hash = '#/train/session';
+}
 
 export function renderTrain(view, title, arg) {
   if (arg === 'session' && activeSession) {
@@ -79,7 +92,6 @@ export function renderTrain(view, title, arg) {
   }
 
   view.innerHTML = `
-    ${streakCard()}
     <section class="stats-row">
       <div><b>${due}</b><span>due</span></div>
       <div><b>${fresh}</b><span>new</span></div>
@@ -89,13 +101,14 @@ export function renderTrain(view, title, arg) {
 
     <form class="card train-setup">
       <h2>Exercise</h2>
-      <div class="choices" role="radiogroup">
+      <div class="tiles" role="radiogroup" aria-label="Exercise">
         ${Object.entries(MODES).map(([k, m]) => `
-          <label class="choice">
+          <label class="tile">
             <input type="radio" name="mode" value="${k}" ${cfg.mode === k ? 'checked' : ''}>
-            <span><b>${m.name}${BEST[k] && store.getRecord(BEST[k]) != null ? ` <em class="best">Best ${store.getRecord(BEST[k])}</em>` : ''}</b><small>${m.desc}</small></span>
+            <span><i aria-hidden="true">${m.icon}</i>${m.name}${BEST[k] && store.getRecord(BEST[k]) != null ? `<em>Best ${store.getRecord(BEST[k])}</em>` : ''}</span>
           </label>`).join('')}
       </div>
+      <p class="mode-desc" id="mode-desc" aria-live="polite"></p>
 
       <div id="field-wrap">
       <h2>Ask about</h2>
@@ -141,8 +154,10 @@ export function renderTrain(view, title, arg) {
   const lengthWrap = view.querySelector('#length-wrap');
   const fieldWrap = view.querySelector('#field-wrap');
   const sync = () => {
-    lengthWrap.hidden = OPEN_ENDED.includes(form.elements.mode.value);
-    fieldWrap.hidden = TRIPLE.includes(form.elements.mode.value);
+    const mode = form.elements.mode.value;
+    lengthWrap.hidden = OPEN_ENDED.includes(mode);
+    fieldWrap.hidden = ALL_FIELDS.includes(mode);
+    view.querySelector('#mode-desc').textContent = MODES[mode].desc;
   };
   form.addEventListener('change', sync);
   sync();
@@ -196,6 +211,16 @@ class Session {
     this.results = [];
     this.retried = new Set();
     this.missedPairs = new Set();
+    this.scored = new Set();
+  }
+
+  get name() {
+    return this.cfg.mode === 'daily' ? DAILY.name : MODES[this.cfg.mode].name;
+  }
+
+  // Learn and the workout keep one title; other modes show the kind of question.
+  setTitle(text) {
+    this.title.textContent = ['learn', 'daily'].includes(this.cfg.mode) ? this.name : text;
   }
 
   fieldFor(n) {
@@ -238,7 +263,11 @@ class Session {
         <a class="btn" href="#/train">Back</a></section>`;
       return;
     }
-    if (this.cfg.mode === 'speed') {
+    if (this.cfg.mode === 'learn') return this.startLearn(pool);
+    if (this.cfg.mode === 'daily') {
+      this.queue = this.makeWorkout(pool);
+      this.total = this.queue.length;
+    } else if (this.cfg.mode === 'speed') {
       this.queue = [];
       this.deadline = Date.now() + SPEED_SECONDS * 1000;
       this.timer = setInterval(() => this.tick(), 200);
@@ -253,6 +282,60 @@ class Session {
       this.total = this.queue.length;
     }
     this.next();
+  }
+
+  // Today's workout: what is due, your slowest numbers and a few new ones,
+  // closed off with three six-digit cards.
+  makeWorkout(pool) {
+    const chosen = pool.filter((n) => store.isDue(n)).sort((a, b) => store.getStats(a).due - store.getStats(b).due).slice(0, 10);
+    const add = (list, max) => list.filter((n) => !chosen.includes(n)).slice(0, max).forEach((n) => chosen.push(n));
+    add(bySlowness(pool), 4);
+    add(pool.filter((n) => !store.getStats(n).seen), 4);
+    if (chosen.length < 12) add(selectNumbers(pool, pool.length), 12 - chosen.length);
+    const triples = FIELDS.every((f) => this.fieldPool(f).length >= 4) ? this.makeTriples(3) : [];
+    return [...shuffle(chosen), ...triples];
+  }
+
+  // Learn: study a few numbers, then a quiz on exactly those.
+  startLearn(pool) {
+    let nums = pool.filter((n) => !store.getStats(n).seen).slice(0, LEARN_COUNT);
+    // Everything trained already: take the ones that are known least well.
+    if (!nums.length) nums = [...pool].sort((a, b) => store.getStats(a).box - store.getStats(b).box).slice(0, LEARN_COUNT).sort();
+    this.learned = nums;
+    // Round 1: number shown, pick each of its parts. Round 2: one part shown, type the number.
+    const round1 = shuffle(nums.flatMap((n) => FIELDS.filter((f) => filled(n, f)).map((f) => ({ n, f, kind: 'choice' }))));
+    const round2 = shuffle(nums.map((n) => ({ n, f: pick(FIELDS.filter((f) => filled(n, f))), kind: 'reverse' })));
+    this.queue = [...round1, ...round2];
+    this.total = this.queue.length;
+    this.study(0);
+  }
+
+  study(i) {
+    this.setTitle('Learn');
+    const n = this.learned[i];
+    const e = store.getEntry(n);
+    const last = i === this.learned.length - 1;
+    this.view.innerHTML = `
+      <div class="session-bar">
+        <span>Study <b>${i + 1}</b> / ${this.learned.length}</span>
+        <div class="progress"><div style="width:${(i / this.learned.length) * 100}%"></div></div>
+        <a href="#/train" class="quit">Quit</a>
+      </div>
+      <div class="card-q study">
+        <div class="bignum">${n}</div>
+        <div class="pao-rows">
+          ${FIELDS.filter((f) => filled(n, f)).map((f) => `<div class="${f}"><small class="f-${f}">${LABEL[f]}</small><span>${h(e[f])}</span></div>`).join('')}
+        </div>
+        <p class="tip">Picture it as one vivid scene before you move on.</p>
+      </div>
+      <div class="actions">
+        ${i > 0 ? '<button class="btn big ghost" id="back">Back</button>' : ''}
+        <button class="btn big" id="fwd">${last ? 'Start the quiz' : 'Next'}</button>
+      </div>`;
+    this.view.querySelector('#back')?.addEventListener('click', () => this.study(i - 1));
+    const fwd = this.view.querySelector('#fwd');
+    fwd.addEventListener('click', () => (last ? this.next() : this.study(i + 1)));
+    fwd.focus({ preventScroll: true });
   }
 
   tick() {
@@ -280,7 +363,9 @@ class Session {
     }
     const n = this.queue.shift();
     if (n == null) return this.finish();
-    const mode = ['mixed', 'slow'].includes(this.cfg.mode) ? pick(['reverse', 'choice']) : this.cfg.mode;
+    if (Array.isArray(n)) return this.cfg.mode === 'encode' ? this.askEncode(n) : this.askDecode(n);
+    if (typeof n === 'object') return n.kind === 'choice' ? this.askChoice(n.n, n) : this.askReverse(n.n, n);
+    const mode = ['mixed', 'slow', 'daily'].includes(this.cfg.mode) ? pick(['reverse', 'choice']) : this.cfg.mode;
     if (mode === 'decode') this.askDecode(n);
     else if (mode === 'encode') this.askEncode(n);
     else if (mode === 'reverse') this.askReverse(n);
@@ -301,14 +386,18 @@ class Session {
     </div>`;
   }
 
-  answer(n, correct, startedAt) {
+  answer(n, correct, startedAt, item = n) {
     const ms = Date.now() - startedAt;
-    store.recordAnswer(n, correct, ms);
+    // Learn asks each number several times in a row. That shouldn't mark it as
+    // mastered: only its first answer and any miss count for spaced repetition.
+    if (this.cfg.mode !== 'learn' || !this.scored.has(n) || !correct) store.recordAnswer(n, correct, ms);
+    this.scored.add(n);
     this.results.push({ n, correct, ms });
+    if (!correct) buzz();
     // A missed card comes back once, a few cards later.
-    if (!correct && this.cfg.mode !== 'speed' && !this.retried.has(n)) {
-      this.retried.add(n);
-      this.queue.splice(Math.min(3, this.queue.length), 0, n);
+    if (!correct && this.cfg.mode !== 'speed' && !this.retried.has(item)) {
+      this.retried.add(item);
+      this.queue.splice(Math.min(3, this.queue.length), 0, item);
       this.total++;
     }
   }
@@ -321,6 +410,7 @@ class Session {
       if (!rights[i]) this.missedPairs.add(n);
     });
     this.results.push({ n: triple, correct: rights.every(Boolean), ms });
+    if (!rights.every(Boolean)) buzz();
   }
 
   tripleCue(triple) {
@@ -330,7 +420,7 @@ class Session {
 
   // Person + action + object shown, type the six digits.
   askDecode(triple) {
-    this.title.textContent = 'Decode';
+    this.setTitle('Decode');
     const t0 = Date.now();
     this.view.innerHTML = `${this.header()}
       <div class="card-q">
@@ -374,7 +464,7 @@ class Session {
 
   // Six digits shown, pick the person, then the action, then the object.
   askEncode(triple) {
-    this.title.textContent = 'Encode';
+    this.setTitle('Encode');
     const t0 = Date.now();
     const rights = [];
     this.view.innerHTML = `${this.header()}
@@ -441,13 +531,13 @@ class Session {
   }
 
   // One field shown, type the number.
-  askReverse(n) {
-    this.title.textContent = 'Reverse';
-    const f = this.fieldFor(n);
+  askReverse(n, item = n) {
+    this.setTitle('Reverse');
+    const f = item.f ?? this.fieldFor(n);
     const t0 = Date.now();
     this.view.innerHTML = `${this.header()}
       <div class="card-q">
-        <p class="kind">${LABEL[f]}</p>
+        <p class="kind f-${f}">${LABEL[f]}</p>
         <div class="cue">${h(store.getEntry(n)[f])}</div>
         <form class="type-answer" autocomplete="off">
           <input name="num" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="00" aria-label="Number">
@@ -467,7 +557,7 @@ class Session {
       const correct = val.padStart(2, '0') === n;
       form.dataset.done = correct ? 'right' : 'wrong';
       input.readOnly = true;
-      this.answer(n, correct, t0);
+      this.answer(n, correct, t0, item);
       const fb = this.view.querySelector('.feedback');
       if (correct) {
         fb.className = 'feedback ok';
@@ -483,11 +573,11 @@ class Session {
   }
 
   // Either number → pick the field value, or field value → pick the number.
-  askChoice(n) {
+  askChoice(n, item = n) {
     const speed = this.cfg.mode === 'speed';
-    this.title.textContent = speed ? 'Speed drill' : 'Multiple choice';
-    const f = this.fieldFor(n);
-    const forward = Math.random() < 0.5;
+    this.setTitle(speed ? 'Speed drill' : 'Multiple choice');
+    const f = item.f ?? this.fieldFor(n);
+    const forward = item.f ? true : Math.random() < 0.5;
     const others = shuffle(this.pool().filter((m) => m !== n && filled(m, f)));
     const seen = new Set([store.getEntry(n)[f].trim().toLowerCase()]);
     const distractors = [];
@@ -504,8 +594,8 @@ class Session {
     this.view.innerHTML = `${this.header()}
       <div class="card-q">
         ${forward
-          ? `<p class="kind">Which ${LABEL[f].toLowerCase()}?</p><div class="bignum">${n}</div>`
-          : `<p class="kind">${LABEL[f]}</p><div class="cue">${h(store.getEntry(n)[f])}</div>`}
+          ? `<p class="kind f-${f}">Which ${LABEL[f].toLowerCase()}?</p><div class="bignum">${n}</div>`
+          : `<p class="kind f-${f}">${LABEL[f]}</p><div class="cue">${h(store.getEntry(n)[f])}</div>`}
       </div>
       <div class="options ${forward ? '' : 'nums'}">
         ${options.map((m) => `<button class="opt" data-n="${m}">${label(m)}</button>`).join('')}
@@ -517,7 +607,7 @@ class Session {
       if (!btn || box.dataset.done) return;
       box.dataset.done = '1';
       const correct = btn.dataset.n === n;
-      this.answer(n, correct, t0);
+      this.answer(n, correct, t0, item);
       box.querySelector(`[data-n="${n}"]`).classList.add('right');
       if (!correct) btn.classList.add('wrong');
       if (speed) {
@@ -559,8 +649,16 @@ class Session {
       }
     }
     const streakLine = total ? celebrate(store.logActivity()) : '';
+    const { mode } = this.cfg;
+    if (mode === 'daily' && total) store.setRecord('dailyDone', store.dayKey());
+    const perfect = total >= 5 && right === total;
+    if (perfect && mode !== 'speed') recordLine = '<p class="record">Perfect score!</p>';
+    if (perfect || recordLine.includes('record')) confetti();
+    const moreToLearn = this.pool().some((n) => !store.getStats(n).seen);
+    const again = mode === 'learn' ? (moreToLearn ? `Learn ${LEARN_COUNT} more` : 'Practise more') : 'Go again';
     this.view.innerHTML = `
       <section class="card results">
+        <p class="kind">${this.name}</p>
         <div class="bignum">${right}<small>/${total}</small></div>
         ${recordLine}
         ${streakLine}
@@ -574,8 +672,8 @@ class Session {
         </ul>
       </section>` : ''}
       <div class="actions">
-        <a class="btn big ghost" href="#/train">Done</a>
-        <button class="btn big" id="again">Go again</button>
+        <a class="btn big ghost" href="${mode === 'daily' ? '#/home' : '#/train'}">Done</a>
+        <button class="btn big" id="again">${again}</button>
       </div>`;
     this.view.querySelector('#again').addEventListener('click', () => {
       activeSession = new Session(this.view, this.title, this.cfg);
